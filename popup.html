@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { width: 480px; font-family: 'Segoe UI', 'Meiryo', sans-serif; font-size: 13px; color: #333; }
+    .header { background: #1a73e8; color: #fff; padding: 12px 16px; }
+    .header h1 { font-size: 15px; font-weight: 600; }
+    .tabs { display: flex; border-bottom: 2px solid #e0e0e0; }
+    .tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; font-weight: 600; color: #666; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+    .tab.active { color: #1a73e8; border-bottom-color: #1a73e8; }
+    .panel { display: none; padding: 12px 16px; max-height: 450px; overflow-y: auto; }
+    .panel.active { display: block; }
+
+    /* グループ一覧 */
+    .group-card { border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+    .group-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .group-name { font-weight: 700; font-size: 14px; }
+    .group-count { color: #888; font-size: 12px; }
+    .group-members { font-size: 12px; color: #555; line-height: 1.6; }
+    .group-actions { display: flex; gap: 6px; }
+    .group-actions button { border: none; background: none; cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 4px; }
+    .btn-edit { color: #1a73e8; }
+    .btn-edit:hover { background: #e8f0fe; }
+    .btn-delete { color: #d93025; }
+    .btn-delete:hover { background: #fce8e6; }
+
+    /* 編集パネル */
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-weight: 600; margin-bottom: 4px; }
+    .form-group input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; }
+    .employee-list { max-height: 300px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 6px; padding: 4px; }
+    .employee-item { display: flex; align-items: center; padding: 5px 8px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+    .employee-item:hover { background: #f5f5f5; }
+    .employee-item input[type="checkbox"] { flex-shrink: 0; width: 16px; height: 16px; margin-right: 8px; }
+    .employee-item label { cursor: pointer; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .search-box { width: 100%; padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; margin-bottom: 8px; font-size: 12px; }
+
+    .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600; }
+    .btn-primary { background: #1a73e8; color: #fff; }
+    .btn-primary:hover { background: #1557b0; }
+    .btn-secondary { background: #e0e0e0; color: #333; }
+    .btn-secondary:hover { background: #ccc; }
+    .btn-row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+
+    .empty { text-align: center; padding: 24px; color: #999; }
+    .status { padding: 8px 12px; margin: 8px 0; border-radius: 6px; font-size: 12px; }
+    .status-ok { background: #e6f4ea; color: #137333; }
+    .status-warn { background: #fef7e0; color: #b06000; }
+
+    .select-all-row { display: flex; gap: 8px; margin-bottom: 6px; }
+    .select-all-row button { font-size: 11px; border: 1px solid #ccc; background: #fafafa; padding: 3px 8px; border-radius: 4px; cursor: pointer; }
+    .select-all-row button:hover { background: #eee; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>MF勤怠 グループチェック</h1>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="groups">グループ一覧</div>
+    <div class="tab" data-tab="edit">追加・編集</div>
+  </div>
+
+  <!-- グループ一覧パネル -->
+  <div id="groups-panel" class="panel active">
+    <div id="groups-list"></div>
+    <button class="btn btn-primary" style="width:100%; margin-top:8px;" id="btn-new-group">+ 新しいグループ</button>
+  </div>
+
+  <!-- 編集パネル -->
+  <div id="edit-panel" class="panel">
+    <div class="form-group">
+      <label>グループ名</label>
+      <input type="text" id="group-name-input" placeholder="例: 4階">
+    </div>
+    <div class="form-group">
+      <label>メンバー</label>
+      <input type="text" class="search-box" id="search-employee" placeholder="名前で検索...">
+      <div class="select-all-row">
+        <button id="btn-select-all">全選択</button>
+        <button id="btn-deselect-all">全解除</button>
+        <span id="selected-count" style="margin-left:auto; color:#888; font-size:11px;"></span>
+      </div>
+      <div class="employee-list" id="employee-list"></div>
+    </div>
+    <div id="edit-status"></div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="btn-cancel">キャンセル</button>
+      <button class="btn btn-primary" id="btn-save">保存</button>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
