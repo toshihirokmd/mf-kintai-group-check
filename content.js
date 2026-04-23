@@ -8,26 +8,54 @@
   }
 
   function normalizeName(name) {
-    return name.replace(/[\s\u3000]+/g, ' ').trim();
+    return name.replace(/[\s　]+/g, ' ').trim();
   }
 
-  // 従業員マルチセレクトを探す（"数字: 名前" パターンのオプションを持つもの）
+  // vue-multiselect は mousedown.prevent を使うため click では発火しない
+  function fireMouseDown(el) {
+    if (!el) return;
+    el.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true, cancelable: true, button: 0, view: window
+    }));
+    el.dispatchEvent(new MouseEvent('mouseup', {
+      bubbles: true, cancelable: true, button: 0, view: window
+    }));
+    el.dispatchEvent(new MouseEvent('click', {
+      bubbles: true, cancelable: true, button: 0, view: window
+    }));
+  }
+
+  // 選択肢テキストを安定的に取り出す（div が無い構造にも対応）
+  function getOptionText(optionEl) {
+    const opt = optionEl.querySelector('.multiselect__option') || optionEl;
+    return opt.textContent?.trim() || '';
+  }
+
+  // 従業員マルチセレクトを探す
+  // "数字: 名前" パターンの選択肢が最も多い .multiselect を採用（部署選択等との誤認識を防ぐ）
   function findEmployeeMultiselect() {
     const multiselects = document.querySelectorAll('.multiselect');
+    let best = null;
+    let bestCount = 0;
     for (const ms of multiselects) {
-      const firstOption = ms.querySelector('.multiselect__element div');
-      if (firstOption && /^\d+:\s/.test(firstOption.textContent.trim())) {
-        return ms;
+      let count = 0;
+      ms.querySelectorAll('.multiselect__element').forEach(li => {
+        const text = getOptionText(li);
+        if (/^\d+:\s/.test(text)) count++;
+      });
+      if (count > bestCount) {
+        best = ms;
+        bestCount = count;
       }
     }
-    return null;
+    return bestCount >= 2 ? best : null;
   }
 
   // 従業員リストを取得
   function getEmployees(ms) {
     const employees = [];
     ms.querySelectorAll('.multiselect__element').forEach(li => {
-      const text = li.querySelector('div')?.textContent?.trim();
+      const text = getOptionText(li);
       if (!text) return;
       const m = text.match(/^(\d+):\s*(.+)$/);
       if (m) employees.push({ id: m[1], name: m[2].trim() });
@@ -35,67 +63,124 @@
     return employees;
   }
 
+  // ドロップダウンを開く（vue-multiselect は focus で activate）
+  async function openDropdown(ms) {
+    const input = ms.querySelector('.multiselect__input');
+    const tags = ms.querySelector('.multiselect__tags');
+    if (input) {
+      input.focus();
+      // focus だけで開かない実装のため mousedown もフォールバックで送る
+      if (tags) fireMouseDown(tags);
+    } else if (tags) {
+      fireMouseDown(tags);
+    }
+    await sleep(200);
+  }
+
+  // ドロップダウンを閉じる
+  function closeDropdown(ms) {
+    const input = ms.querySelector('.multiselect__input');
+    if (input) input.blur();
+  }
+
+  // 検索入力をクリア（選択肢のフィルタを解除）
+  async function clearSearch(ms) {
+    const input = ms.querySelector('.multiselect__input');
+    if (input && input.value !== '') {
+      // ネイティブ setter 経由で値を設定しないと Vue に検知されない
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(80);
+    }
+  }
+
+  // オプションを選択/解除（vue-multiselect は mousedown.prevent をリッスン）
+  async function toggleOption(optionEl) {
+    const span = optionEl.querySelector('.multiselect__option') || optionEl.querySelector('span');
+    fireMouseDown(span);
+  }
+
+  // ドロップダウンが閉じていたら開き直す
+  async function ensureOpen(ms) {
+    const wrapper = ms.querySelector('.multiselect__content-wrapper');
+    if (!wrapper || wrapper.style.display === 'none') {
+      await openDropdown(ms);
+    }
+  }
+
   // グループメンバーを一括選択
   async function selectGroup(ms, memberNames) {
     const targetNames = new Set(memberNames.map(normalizeName));
-    const tags = ms.querySelector('.multiselect__tags');
 
-    // ドロップダウンを開く
-    tags.click();
-    await sleep(300);
+    await openDropdown(ms);
+    await clearSearch(ms);
+    await ensureOpen(ms);
 
     // 現在の選択を全解除
-    let selected = ms.querySelectorAll('.multiselect__element[aria-selected="true"]');
+    const selected = Array.from(ms.querySelectorAll('.multiselect__element[aria-selected="true"]'));
     for (const el of selected) {
-      el.querySelector('span').click();
-      await sleep(30);
+      await toggleOption(el);
+      await sleep(40);
+      await ensureOpen(ms);
     }
     await sleep(100);
-
-    // ドロップダウンが閉じていたら再度開く
-    const wrapper = ms.querySelector('.multiselect__content-wrapper');
-    if (wrapper && wrapper.style.display === 'none') {
-      tags.click();
-      await sleep(300);
-    }
+    await clearSearch(ms);
+    await ensureOpen(ms);
 
     // 対象メンバーを選択
     const options = ms.querySelectorAll('.multiselect__element');
     let count = 0;
+    let notFound = [];
+    const foundNames = new Set();
+
     for (const option of options) {
-      const text = option.querySelector('div')?.textContent?.trim();
+      const text = getOptionText(option);
       if (!text) continue;
       const m = text.match(/^(\d+):\s*(.+)$/);
       if (!m) continue;
       const name = normalizeName(m[2]);
-      if (targetNames.has(name) && option.getAttribute('aria-selected') !== 'true') {
-        option.querySelector('span').click();
-        count++;
-        await sleep(30);
-      }
+      if (!targetNames.has(name)) continue;
+      foundNames.add(name);
+      if (option.getAttribute('aria-selected') === 'true') continue;
+
+      await toggleOption(option);
+      count++;
+      await sleep(40);
+      await ensureOpen(ms);
     }
 
-    // ドロップダウンを閉じる
+    // ターゲットに含まれるが選択肢になかった名前を検出
+    for (const n of targetNames) {
+      if (!foundNames.has(n)) notFound.push(n);
+    }
+
     await sleep(100);
-    document.activeElement?.blur();
+    closeDropdown(ms);
     document.body.click();
 
-    showToast(`${count}名を選択しました`);
+    if (notFound.length > 0) {
+      showToast(`${count}名を選択（${notFound.length}名未検出: ${notFound.slice(0, 2).join('、')}${notFound.length > 2 ? '…' : ''}）`);
+    } else {
+      showToast(`${count}名を選択しました`);
+    }
   }
 
   // 選択をクリア
   async function clearSelection(ms) {
-    const tags = ms.querySelector('.multiselect__tags');
-    tags.click();
-    await sleep(300);
+    await openDropdown(ms);
+    await clearSearch(ms);
+    await ensureOpen(ms);
 
-    const selected = ms.querySelectorAll('.multiselect__element[aria-selected="true"]');
+    const selected = Array.from(ms.querySelectorAll('.multiselect__element[aria-selected="true"]'));
     for (const el of selected) {
-      el.querySelector('span').click();
-      await sleep(30);
+      await toggleOption(el);
+      await sleep(40);
+      await ensureOpen(ms);
     }
 
     await sleep(100);
+    closeDropdown(ms);
     document.body.click();
     showToast('選択をクリアしました');
   }
@@ -114,7 +199,7 @@
     setTimeout(() => {
       toast.style.opacity = '0';
       setTimeout(() => toast.remove(), 300);
-    }, 2000);
+    }, 2500);
   }
 
   // ボタンUIを注入
@@ -125,7 +210,6 @@
       return;
     }
 
-    // 既存のUIがあれば削除
     document.getElementById(CONTAINER_ID)?.remove();
 
     const data = await chrome.storage.sync.get(['groups']);
@@ -143,12 +227,12 @@
     label.style.cssText = 'font-size: 13px; font-weight: bold; color: #555; margin-right: 4px;';
     container.appendChild(label);
 
-    // グループボタン
     const colors = ['#1a73e8', '#0d652d', '#8430ce', '#c5221f', '#e37400'];
     let colorIdx = 0;
     for (const [name, members] of Object.entries(groups)) {
       const color = colors[colorIdx++ % colors.length];
       const btn = document.createElement('button');
+      btn.type = 'button';
       btn.textContent = `${name} (${members.length}名)`;
       btn.style.cssText = `
         padding: 5px 14px; border: 2px solid ${color}; background: #fff;
@@ -165,13 +249,16 @@
       });
       btn.addEventListener('click', (e) => {
         e.preventDefault();
-        selectGroup(ms, members);
+        e.stopPropagation();
+        // クリック時に再度 multiselect を探し直す（再レンダリング対策）
+        const currentMs = findEmployeeMultiselect() || ms;
+        selectGroup(currentMs, members);
       });
       container.appendChild(btn);
     }
 
-    // クリアボタン
     const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
     clearBtn.textContent = 'クリア';
     clearBtn.style.cssText = `
       padding: 5px 14px; border: 1px solid #999; background: #fff;
@@ -186,11 +273,12 @@
     });
     clearBtn.addEventListener('click', (e) => {
       e.preventDefault();
-      clearSelection(ms);
+      e.stopPropagation();
+      const currentMs = findEmployeeMultiselect() || ms;
+      clearSelection(currentMs);
     });
     container.appendChild(clearBtn);
 
-    // マルチセレクトの直前に挿入
     ms.parentElement.insertBefore(container, ms);
   }
 
