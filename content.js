@@ -25,14 +25,17 @@
     }));
   }
 
-  // 選択肢テキストを安定的に取り出す（div が無い構造にも対応）
+  // 選択肢テキストを安定的に取り出す（構造のバリエーションに対応）
   function getOptionText(optionEl) {
-    const opt = optionEl.querySelector('.multiselect__option') || optionEl;
+    const opt = optionEl.querySelector('.multiselect__option')
+             || optionEl.querySelector('div')
+             || optionEl;
     return opt.textContent?.trim() || '';
   }
 
   // 従業員マルチセレクトを探す
-  // "数字: 名前" パターンの選択肢が最も多い .multiselect を採用（部署選択等との誤認識を防ぐ）
+  // "数字: 名前" パターンの選択肢を1つでも持つ .multiselect が対象
+  // 複数ある場合は最も多くマッチするものを採用（部署選択等との誤認識を防ぐ）
   function findEmployeeMultiselect() {
     const multiselects = document.querySelectorAll('.multiselect');
     let best = null;
@@ -48,7 +51,7 @@
         bestCount = count;
       }
     }
-    return bestCount >= 2 ? best : null;
+    return best;
   }
 
   // 従業員リストを取得
