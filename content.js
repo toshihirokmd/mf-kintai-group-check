@@ -55,7 +55,6 @@
         bestCount = count;
       }
     }
-    if (best) console.debug('[MFGroup] 従業員マルチセレクト検出:', bestCount, '名');
     return best;
   }
 
@@ -211,27 +210,18 @@
   }
 
   // ボタンUIを注入
-  let injectRetryCount = 0;
   async function injectUI() {
     const ms = findEmployeeMultiselect();
     if (!ms) {
-      if (injectRetryCount++ % 5 === 0) {
-        console.debug('[MFGroup] multiselect未検出。総数:', document.querySelectorAll('.multiselect').length, '/ element数:', document.querySelectorAll('.multiselect__element').length);
-      }
       setTimeout(injectUI, 1500);
       return;
     }
-    injectRetryCount = 0;
 
     document.getElementById(CONTAINER_ID)?.remove();
 
     const data = await chrome.storage.sync.get(['groups']);
     const groups = data.groups || {};
-    if (Object.keys(groups).length === 0) {
-      console.debug('[MFGroup] グループが未登録のためUI非表示');
-      return;
-    }
-    console.debug('[MFGroup] UI注入:', Object.keys(groups).length, 'グループ');
+    if (Object.keys(groups).length === 0) return;
 
     const container = document.createElement('div');
     container.id = CONTAINER_ID;
