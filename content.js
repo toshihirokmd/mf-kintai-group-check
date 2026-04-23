@@ -25,12 +25,16 @@
     }));
   }
 
-  // 選択肢テキストを安定的に取り出す（構造のバリエーションに対応）
+  // 選択肢テキストを取り出す。v1.0.0 と同じ「最初の div」を優先し、
+  // 無い場合のみ .multiselect__option / 要素全体にフォールバックする
   function getOptionText(optionEl) {
-    const opt = optionEl.querySelector('.multiselect__option')
-             || optionEl.querySelector('div')
-             || optionEl;
-    return opt.textContent?.trim() || '';
+    const div = optionEl.querySelector('div');
+    if (div) {
+      const t = div.textContent?.trim() || '';
+      if (t) return t;
+    }
+    const opt = optionEl.querySelector('.multiselect__option');
+    return opt?.textContent?.trim() || optionEl.textContent?.trim() || '';
   }
 
   // 従業員マルチセレクトを探す
@@ -51,6 +55,7 @@
         bestCount = count;
       }
     }
+    if (best) console.debug('[MFGroup] 従業員マルチセレクト検出:', bestCount, '名');
     return best;
   }
 
@@ -206,18 +211,27 @@
   }
 
   // ボタンUIを注入
+  let injectRetryCount = 0;
   async function injectUI() {
     const ms = findEmployeeMultiselect();
     if (!ms) {
+      if (injectRetryCount++ % 5 === 0) {
+        console.debug('[MFGroup] multiselect未検出。総数:', document.querySelectorAll('.multiselect').length, '/ element数:', document.querySelectorAll('.multiselect__element').length);
+      }
       setTimeout(injectUI, 1500);
       return;
     }
+    injectRetryCount = 0;
 
     document.getElementById(CONTAINER_ID)?.remove();
 
     const data = await chrome.storage.sync.get(['groups']);
     const groups = data.groups || {};
-    if (Object.keys(groups).length === 0) return;
+    if (Object.keys(groups).length === 0) {
+      console.debug('[MFGroup] グループが未登録のためUI非表示');
+      return;
+    }
+    console.debug('[MFGroup] UI注入:', Object.keys(groups).length, 'グループ');
 
     const container = document.createElement('div');
     container.id = CONTAINER_ID;
